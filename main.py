@@ -89,41 +89,35 @@ def get_client():
 
 
 def transcribe_audio(audio_path: str, mime_type: str = "audio/mpeg") -> dict:
-    """Transcribe audio using Claude's native audio understanding."""
+    """Transcribe audio using SpeechRecognition (Google STT, free, no key needed)."""
     client = get_client()
+    import speech_recognition as sr
+    from pydub import AudioSegment
+    import io
 
-    with open(audio_path, "rb") as f:
-        audio_b64 = base64.standard_b64encode(f.read()).decode()
+    audio_seg = AudioSegment.from_file(audio_path)
+    chunk_ms = 55000  # 55s chunks (Google STT limit is 60s)
+    chunks = [audio_seg[i:i+chunk_ms] for i in range(0, len(audio_seg), chunk_ms)]
+    recognizer = sr.Recognizer()
+    parts = []
+    for i, chunk in enumerate(chunks):
+        wav_io = io.BytesIO()
+        chunk.export(wav_io, format="wav")
+        wav_io.seek(0)
+        try:
+            with sr.AudioFile(wav_io) as source:
+                audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data)
+            parts.append(text)
+        except Exception as e:
+            app.logger.warning(f"Chunk {i} failed: {e}")
+    
+    transcript = " ".join(parts).strip()
+    
+    if not transcript:
+        raise ValueError("Could not transcribe audio. Check your internet connection and try again.")
 
-    response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=4096,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": mime_type,
-                        "data": audio_b64
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": (
-                        "Transcribe this medical dictation audio verbatim, word for word. "
-                        "Preserve all medical terminology exactly as spoken. "
-                        "Output only the raw transcript — no labels, no commentary, no timestamps."
-                    )
-                }
-            ]
-        }]
-    )
 
-    transcript = " ".join(
-        block.text for block in response.content if block.type == "text"
-    ).strip()
 
     return {
         "transcript": transcript,
