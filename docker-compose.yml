@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   medscribe:
     build: .
@@ -13,8 +11,3 @@ services:
       - ./audio:/app/audio
       - ./outputs:/app/outputs
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
