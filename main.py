@@ -9,7 +9,7 @@ import base64
 import re
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory
 import anthropic
 
 app = Flask(__name__)
@@ -250,7 +250,632 @@ def soap_to_markdown(soap_data: dict, transcript: str = "") -> str:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedScribe AI — Medical Transcription & SOAP Generator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --blue: #1a56db;
+    --blue-light: #ebf3ff;
+    --blue-dark: #1240a8;
+    --green: #057a55;
+    --green-light: #def7ec;
+    --red: #c81e1e;
+    --red-light: #fde8e8;
+    --amber: #92400e;
+    --amber-light: #fef3c7;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-400: #9ca3af;
+    --gray-600: #4b5563;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md: 0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.06);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  /* Header */
+  header {
+    background: #fff;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 34px; height: 34px;
+    background: var(--blue);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 18px;
+  }
+  .logo-text { font-weight: 700; font-size: 17px; color: var(--gray-900); }
+  .logo-tag { font-size: 12px; color: var(--gray-400); font-weight: 400; margin-left: 4px; }
+  .header-badge {
+    margin-left: auto;
+    font-size: 12px;
+    background: var(--blue-light);
+    color: var(--blue);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+
+  /* Layout */
+  main { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  .page-title { font-size: 24px; font-weight: 700; margin-bottom: .25rem; }
+  .page-sub { color: var(--gray-600); font-size: 14px; margin-bottom: 2rem; }
+
+  /* Steps */
+  .steps { display: flex; flex-direction: column; gap: 1.25rem; }
+
+  .step-card {
+    background: #fff;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .step-card.active { border-color: var(--blue); }
+  .step-card.done { border-color: var(--green); }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  .step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--gray-100);
+    color: var(--gray-600);
+    font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-card.active .step-num { background: var(--blue); color: #fff; }
+  .step-card.done .step-num { background: var(--green); color: #fff; }
+  .step-title { font-weight: 600; font-size: 15px; }
+  .step-desc { font-size: 13px; color: var(--gray-600); margin-left: auto; }
+
+  .step-body { padding: 1.25rem; }
+
+  /* Form elements */
+  label { font-size: 13px; color: var(--gray-600); font-weight: 500; display: block; margin-bottom: 6px; }
+
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: var(--gray-900);
+    background: var(--gray-50);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,86,219,.1); }
+
+  .file-drop {
+    border: 2px dashed var(--gray-200);
+    border-radius: var(--radius);
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    position: relative;
+  }
+  .file-drop:hover, .file-drop.drag { border-color: var(--blue); background: var(--blue-light); }
+  .file-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .file-drop-icon { font-size: 32px; margin-bottom: .5rem; }
+  .file-drop-text { font-size: 14px; color: var(--gray-600); }
+  .file-drop-hint { font-size: 12px; color: var(--gray-400); margin-top: 4px; }
+  .file-selected { border-color: var(--green); background: var(--green-light); }
+  .file-selected .file-drop-text { color: var(--green); font-weight: 600; }
+
+  textarea {
+    width: 100%;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    font-family: 'SF Mono', 'Fira Mono', monospace;
+    color: var(--gray-900);
+    background: var(--gray-50);
+    resize: vertical;
+    min-height: 140px;
+    line-height: 1.7;
+  }
+  textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,86,219,.1); }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all .15s;
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-primary:hover:not(:disabled) { background: var(--blue-dark); }
+  .btn-ghost { background: transparent; color: var(--gray-700); border-color: var(--gray-200); }
+  .btn-ghost:hover:not(:disabled) { background: var(--gray-100); }
+  .btn-sm { padding: 6px 12px; font-size: 13px; }
+
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: .75rem; }
+
+  /* Status messages */
+  .status {
+    font-size: 13px;
+    margin-top: .5rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status.ok { color: var(--green); }
+  .status.err { color: var(--red); }
+  .status.info { color: var(--blue); }
+
+  /* Spinner */
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--gray-200);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Progress bar */
+  .progress-wrap { margin-top: .75rem; }
+  .progress-bar {
+    height: 4px;
+    background: var(--gray-200);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--blue);
+    border-radius: 2px;
+    width: 0%;
+    transition: width .4s ease;
+  }
+  .progress-label { font-size: 12px; color: var(--gray-600); margin-top: 4px; }
+
+  /* SOAP Note output */
+  .soap-output { margin-top: 0; }
+
+  .soap-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .soap-section {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: .875rem 1rem;
+  }
+  .soap-section.full { grid-column: 1 / -1; }
+
+  .soap-section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--gray-400);
+    margin-bottom: .5rem;
+  }
+  .soap-section.s-sec .soap-section-label { color: #5b21b6; }
+  .soap-section.o-sec .soap-section-label { color: #0369a1; }
+  .soap-section.a-sec .soap-section-label { color: #047857; }
+  .soap-section.p-sec .soap-section-label { color: #b45309; }
+
+  .soap-field { margin-bottom: .4rem; font-size: 13px; line-height: 1.6; }
+  .soap-field-label { font-weight: 600; color: var(--gray-700); }
+  .soap-field-val { color: var(--gray-900); }
+
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-weight: 500;
+    margin: 2px 3px 2px 0;
+    background: var(--gray-100);
+    color: var(--gray-700);
+  }
+  .pill.pass { background: var(--green-light); color: var(--green); }
+  .pill.fail { background: var(--red-light); color: var(--red); }
+  .pill.review { background: var(--amber-light); color: var(--amber); }
+
+  .validation-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: .75rem 1rem;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .validation-bar.pass { background: var(--green-light); color: var(--green); border: 1px solid #a7f3d0; }
+  .validation-bar.fail { background: var(--red-light); color: var(--red); border: 1px solid #fca5a5; }
+  .validation-bar.review { background: var(--amber-light); color: var(--amber); border: 1px solid #fde68a; }
+
+  /* Divider */
+  .divider { border: none; border-top: 1px solid var(--gray-200); margin: 1rem 0; }
+
+  @media (max-width: 600px) {
+    .soap-grid { grid-template-columns: 1fr; }
+    .soap-section.full { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🏥</div>
+    <div>
+      <span class="logo-text">MedScribe AI</span>
+      <span class="logo-tag">by ParvinAI Agency</span>
+    </div>
+  </div>
+  <span class="header-badge">Powered by Claude claude-sonnet-4-5</span>
+</header>
+
+<main>
+  <h1 class="page-title">Medical Transcription & SOAP Note Generator</h1>
+  <p class="page-sub">Upload a physician dictation audio → get verbatim transcript → structured SOAP note. Fully automated with AI.</p>
+
+  <div class="steps">
+
+    <!-- Step 1: API Key -->
+    <div class="step-card active" id="card1">
+      <div class="step-header">
+        <span class="step-num" id="num1">1</span>
+        <span class="step-title">Anthropic API Key</span>
+        <span class="step-desc">Required to run Claude</span>
+      </div>
+      <div class="step-body">
+        <label for="apiKey">API Key <span style="color:var(--gray-400);font-weight:400">(get one free at console.anthropic.com)</span></label>
+        <div style="display:flex;gap:8px">
+          <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off" />
+          <button class="btn btn-primary" onclick="saveKey()">Save</button>
+        </div>
+        <div id="keyStatus" class="status" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Step 2: Upload Audio -->
+    <div class="step-card" id="card2">
+      <div class="step-header">
+        <span class="step-num" id="num2">2</span>
+        <span class="step-title">Upload Medical Dictation Audio</span>
+        <span class="step-desc">MP3, WAV, M4A</span>
+      </div>
+      <div class="step-body">
+        <div class="file-drop" id="dropZone">
+          <input type="file" id="audioInput" accept="audio/*" onchange="onFileSelect(this)" />
+          <div class="file-drop-icon">🎙️</div>
+          <div class="file-drop-text" id="dropText">Click to choose audio file or drag & drop</div>
+          <div class="file-drop-hint">Supports MP3, WAV, M4A, OGG, WebM · Max 50MB</div>
+        </div>
+        <div id="audioStatus" class="status" style="display:none"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="transcribeBtn" onclick="runTranscribe()" disabled>
+            🎙️ Transcribe Audio
+          </button>
+        </div>
+        <div id="transcribeProgress" style="display:none" class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-label" id="progressLabel">Uploading...</div>
+        </div>
+        <div id="transcribeStatus" class="status" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Step 3: Transcript -->
+    <div class="step-card" id="card3">
+      <div class="step-header">
+        <span class="step-num" id="num3">3</span>
+        <span class="step-title">Raw Transcript</span>
+        <span class="step-desc">Review & edit if needed</span>
+      </div>
+      <div class="step-body">
+        <label>Transcribed text (editable)</label>
+        <textarea id="transcriptArea" placeholder="Transcript will appear here after Step 2..."></textarea>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="soapBtn" onclick="runSoap()" disabled>
+            📋 Generate SOAP Note
+          </button>
+          <button class="btn btn-ghost btn-sm" id="copyTxBtn" onclick="copyTranscript()" disabled>
+            📄 Copy transcript
+          </button>
+        </div>
+        <div id="soapStatus" class="status" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Step 4: SOAP Output -->
+    <div class="step-card" id="card4" style="display:none">
+      <div class="step-header">
+        <span class="step-num done" id="num4">✓</span>
+        <span class="step-title">SOAP Note</span>
+        <span class="step-desc" id="soapMeta"></span>
+      </div>
+      <div class="step-body soap-output" id="soapBody">
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+let apiKey = '';
+let selectedFile = null;
+
+// ─── Step 1: API Key ──────────────────────────────────────────────────────────
+function saveKey() {
+  const val = document.getElementById('apiKey').value.trim();
+  const st = document.getElementById('keyStatus');
+  st.style.display = 'flex';
+  if (!val || !val.startsWith('sk-ant-')) {
+    st.className = 'status err';
+    st.innerHTML = '❌ Key must start with sk-ant-';
+    return;
+  }
+  apiKey = val;
+  st.className = 'status ok';
+  st.innerHTML = '✅ Key saved — ready to go';
+  document.getElementById('card1').className = 'step-card done';
+  document.getElementById('num1').innerHTML = '✓';
+  document.getElementById('card2').className = 'step-card active';
+}
+
+// ─── Step 2: Audio Upload ─────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+
+function onFileSelect(input) {
+  if (input.files[0]) setFile(input.files[0]);
+}
+
+function setFile(file) {
+  selectedFile = file;
+  const dz = document.getElementById('dropZone');
+  dz.classList.add('file-selected');
+  document.getElementById('dropText').textContent = `✅ ${file.name} (${(file.size/1024/1024).toFixed(1)} MB)`;
+
+  const st = document.getElementById('audioStatus');
+  st.style.display = 'flex';
+  st.className = 'status ok';
+  st.innerHTML = `🎵 Audio ready: ${file.name}`;
+
+  document.getElementById('transcribeBtn').disabled = !apiKey;
+  if (!apiKey) {
+    const st2 = document.getElementById('audioStatus');
+    st2.className = 'status info';
+    st2.innerHTML = '⚠️ Save your API key in Step 1 first';
+  }
+}
+
+async function runTranscribe() {
+  if (!selectedFile || !apiKey) return;
+
+  document.getElementById('transcribeBtn').disabled = true;
+  document.getElementById('transcribeProgress').style.display = 'block';
+  setProgress(20, 'Uploading audio...');
+
+  const st = document.getElementById('transcribeStatus');
+  st.style.display = 'flex';
+  st.className = 'status info';
+  st.innerHTML = '<span class="spinner"></span> Sending to Claude for transcription (large files may take 30–60s)...';
+
+  const form = new FormData();
+  form.append('audio', selectedFile);
+
+  try {
+    setProgress(50, 'Claude is transcribing...');
+    const resp = await fetch('/api/transcribe', {
+      method: 'POST',
+      headers: { 'X-API-Key': apiKey },
+      body: form
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Transcription failed');
+
+    setProgress(100, 'Done');
+    document.getElementById('transcriptArea').value = data.transcript;
+    document.getElementById('soapBtn').disabled = false;
+    document.getElementById('copyTxBtn').disabled = false;
+
+    st.className = 'status ok';
+    st.innerHTML = `✅ Transcription complete · ${data.output_tokens} words extracted`;
+    document.getElementById('card3').className = 'step-card active';
+    document.getElementById('card2').className = 'step-card done';
+    document.getElementById('num2').innerHTML = '✓';
+  } catch(e) {
+    st.className = 'status err';
+    st.innerHTML = '❌ ' + e.message;
+    document.getElementById('transcribeBtn').disabled = false;
+    setProgress(0, '');
+  }
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = label;
+}
+
+// ─── Step 3: SOAP Generation ──────────────────────────────────────────────────
+async function runSoap() {
+  const transcript = document.getElementById('transcriptArea').value.trim();
+  if (!transcript) return;
+
+  document.getElementById('soapBtn').disabled = true;
+  const st = document.getElementById('soapStatus');
+  st.style.display = 'flex';
+  st.className = 'status info';
+  st.innerHTML = '<span class="spinner"></span> Generating SOAP note with Claude...';
+
+  try {
+    const resp = await fetch('/api/soap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      body: JSON.stringify({ transcript })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'SOAP generation failed');
+
+    st.className = 'status ok';
+    st.innerHTML = '✅ SOAP note generated and saved to outputs/';
+    renderSoap(data);
+    document.getElementById('card3').className = 'step-card done';
+    document.getElementById('num3').innerHTML = '✓';
+  } catch(e) {
+    st.className = 'status err';
+    st.innerHTML = '❌ ' + e.message;
+    document.getElementById('soapBtn').disabled = false;
+  }
+}
+
+function renderSoap(data) {
+  const soap = data.soap_note.soap_note;
+  const pi = data.soap_note.patient_info;
+  const val = data.validation;
+  const s = soap.subjective;
+  const o = soap.objective;
+  const a = soap.assessment;
+  const p = soap.plan;
+
+  const overall = val.overall_status;
+  const valClass = overall === 'PASS' ? 'pass' : overall === 'REVIEW_NEEDED' ? 'review' : 'fail';
+  const valIcon = overall === 'PASS' ? '✅' : overall === 'REVIEW_NEEDED' ? '⚠️' : '❌';
+
+  document.getElementById('soapMeta').textContent =
+    `${pi.age || ''} ${pi.sex || ''} · ${pi.chief_complaint || ''}`;
+
+  const meds = (s.current_medications||[]).map(m => `<span class="pill">${m}</span>`).join('') || '—';
+  const planMeds = (p.medications||[]).map(m => `<span class="pill">${m}</span>`).join('') || '—';
+  const planProc = (p.procedures||[]).map(m => `<span class="pill">${m}</span>`).join('') || '—';
+
+  document.getElementById('soapBody').innerHTML = `
+    <div class="soap-grid">
+      <div class="soap-section full">
+        <div class="soap-section-label">Patient Information</div>
+        <div class="soap-field"><span class="soap-field-label">Age/Sex:</span> <span class="soap-field-val">${pi.age||'N/A'} · ${pi.sex||'N/A'}</span></div>
+        <div class="soap-field"><span class="soap-field-label">Chief Complaint:</span> <span class="soap-field-val">${pi.chief_complaint||'N/A'}</span></div>
+      </div>
+
+      <div class="soap-section s-sec">
+        <div class="soap-section-label">S — Subjective (Patient-reported)</div>
+        <div class="soap-field"><span class="soap-field-label">CC:</span> <span class="soap-field-val">${s.chief_complaint||''}</span></div>
+        <div class="soap-field"><span class="soap-field-label">HPI:</span> <span class="soap-field-val">${s.history_of_present_illness||''}</span></div>
+        ${s.pain_scale ? `<div class="soap-field"><span class="soap-field-label">Pain:</span> <span class="soap-field-val">${s.pain_scale}</span></div>` : ''}
+        <div class="soap-field"><span class="soap-field-label">Medications:</span> ${meds}</div>
+        ${s.other_subjective ? `<div class="soap-field"><span class="soap-field-label">Other:</span> <span class="soap-field-val">${s.other_subjective}</span></div>` : ''}
+      </div>
+
+      <div class="soap-section o-sec">
+        <div class="soap-section-label">O — Objective (Clinician-observed)</div>
+        ${o.vital_signs ? `<div class="soap-field"><span class="soap-field-label">Vitals:</span> <span class="soap-field-val">${o.vital_signs}</span></div>` : ''}
+        <div class="soap-field"><span class="soap-field-label">Exam:</span> <span class="soap-field-val">${o.physical_exam||''}</span></div>
+        ${o.diagnostic_results ? `<div class="soap-field"><span class="soap-field-label">Results:</span> <span class="soap-field-val">${o.diagnostic_results}</span></div>` : ''}
+      </div>
+
+      <div class="soap-section a-sec">
+        <div class="soap-section-label">A — Assessment</div>
+        <div class="soap-field"><span class="soap-field-label">Diagnosis:</span> <span class="soap-field-val">${a.diagnosis||''}</span></div>
+        <div class="soap-field"><span class="soap-field-val">${a.clinical_impression||''}</span></div>
+      </div>
+
+      <div class="soap-section p-sec">
+        <div class="soap-section-label">P — Plan</div>
+        <div class="soap-field"><span class="soap-field-label">Medications:</span> ${planMeds}</div>
+        <div class="soap-field"><span class="soap-field-label">Procedures:</span> ${planProc}</div>
+        <div class="soap-field"><span class="soap-field-label">Follow-up:</span> <span class="soap-field-val">${p.follow_up||''}</span></div>
+        ${p.patient_education ? `<div class="soap-field"><span class="soap-field-label">Education:</span> <span class="soap-field-val">${p.patient_education}</span></div>` : ''}
+      </div>
+    </div>
+
+    <div class="validation-bar ${valClass}">
+      ${valIcon} <strong>S/O Boundary Check: ${overall}</strong> &nbsp;·&nbsp; ${data.soap_note.validation.boundary_check_notes||''}
+    </div>
+
+    <hr class="divider">
+
+    <div class="btn-row">
+      <button class="btn btn-ghost btn-sm" onclick="downloadFile('soap_note.json')">⬇️ Download JSON</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadFile('soap_note.md')">⬇️ Download Markdown</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadFile('raw_transcript.txt')">⬇️ Download Transcript</button>
+    </div>
+  `;
+
+  document.getElementById('card4').style.display = 'block';
+  document.getElementById('card4').className = 'step-card done';
+  document.getElementById('card4').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function copyTranscript() {
+  const t = document.getElementById('transcriptArea').value;
+  navigator.clipboard.writeText(t).then(() => alert('Transcript copied!'));
+}
+
+function downloadFile(name) {
+  window.open(`/api/outputs/${name}`, '_blank');
+}
+</script>
+</body>
+</html>
+"""
 
 
 @app.route("/health")
