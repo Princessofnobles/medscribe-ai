@@ -1,8 +1,5 @@
 FROM python:3.11-slim
 
-LABEL maintainer="ParvinAI Agency"
-LABEL description="Medical Transcription & SOAP Note Generator"
-
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
@@ -11,8 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app/main.py .
-COPY app/templates/ ./templates/
+COPY main.py .
+COPY templates/ ./templates/
 
 RUN mkdir -p /app/audio /app/outputs
 
